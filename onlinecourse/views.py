@@ -11,8 +11,8 @@ from django.contrib.auth import login, logout, authenticate
 import logging
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
-# Create your views here.
 
+# Create your views here.
 
 def registration_request(request):
     context = {}
@@ -31,8 +31,7 @@ def registration_request(request):
         except:
             logger.error("New user")
         if not user_exist:
-            user = User.objects.create_user(username=username, first_name=first_name, last_name=last_name,
-                                            password=password)
+            user = User.objects.create_user(username=username, first_name=first_name, last_name=last_name, password=password)
             login(request, user)
             return redirect("onlinecourse:index")
         else:
@@ -104,14 +103,28 @@ def enroll(request, course_id):
     return HttpResponseRedirect(reverse(viewname='onlinecourse:course_details', args=(course.id,)))
 
 
-# <HINT> Create a submit view to create an exam submission record for a course enrollment,
-# you may implement it based on following logic:
-         # Get user and course object, then get the associated enrollment object created when the user enrolled the course
-         # Create a submission object referring to the enrollment
-         # Collect the selected choices from exam form
-         # Add each selected choice object to the submission object
-         # Redirect to show_exam_result with the submission id
-#def submit(request, course_id):
+def submit(request, course_id):
+    # get current user and course object
+    user = request.user
+    course = get_object_or_404(Course, pk=course_id)
+
+    # get associated enrollment object
+    enrollment = Enrollment.objects.get(user=user, course=course)
+
+    # create new submission object
+    submission = Submission.objects.create(enrollment=enrollment)
+
+    # collect selected choices with http request object
+    choices = extract_answers(request)
+
+    # add selected choice objects to the submission object
+    submission.choices.set(choices)
+    submission_id = submission.id
+
+    # redirect to the 'show exam result' tempalte
+    return HttpResponseRedirect(reverse(viewname='onlinecourse:exam_result', args=(course_id, submission_id)))
+
+    # configure urls.py to route to the new submit view--done in urls.py
 
 
 # An example method to collect the selected choices from the exam form from the request object
@@ -125,13 +138,31 @@ def extract_answers(request):
    return submitted_anwsers
 
 
-# <HINT> Create an exam result view to check if learner passed exam and show their question results and result for each question,
-# you may implement it based on the following logic:
-        # Get course and submission based on their ids
-        # Get the selected choice ids from the submission record
-        # For each selected choice, check if it is a correct answer or not
-        # Calculate the total score
-#def show_exam_result(request, course_id, submission_id):
+# <HINT> Create an exam result view to check if learner passed exam and show their question results and result for each question
+       
+def show_exam_result(request, course_id, submission_id):
+    # Get course and submission based on their ids
+    context = {}
+    course = get_object_or_404(Course, pk=course_id)
+    submission = Submission.objects.get(id=submission_id)
+    choices = submission.choices.all()
 
+    # Get the selected choice ids from the submission record
+    total_score = 0
+    questions = course.question_set.all()
 
+    # For each selected choice, check if it is a correct answer or not
+    for question in questions:
+        correct_choices = question.choice_set.filter(is_correct=True)
+        selected_choices = choices.filter(question=question)  
 
+    # Calculate the total score
+        if set(correct_choices) == set(selected_choices):
+            total_score += question.grade
+    context['course'] = course
+    context['grade'] = total_score
+    context['choices'] = choices
+
+    return render(request, 'onlinecourse/exam_result_bootstrap.html', context)
+
+    # configure urls.py to route to the new submit view--done in urls.py
